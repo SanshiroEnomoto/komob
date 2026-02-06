@@ -94,7 +94,7 @@ class MemoryRegisterTable : public komob::RegisterTable {
 
 If logging is needed, write to `std::cerr` and connect to an appropriate log collection system based on how the server is deployed (see below).
 
-### Server Part
+### Server Implementation
 The server listens on port 502 (or a specified port) and allows connected clients to read from and write to the user's register table via the Modbus protocol.
 
 #### Standard Configuration
@@ -208,10 +208,10 @@ else:
 For using 32-bit values, see the next chapter.
 
 
-## Handling 32-bit Data
+## 32-bit Data Handling
 Modbus uses a 16-bit data width, and access to 32-bit data is not defined in the specification.
 Komob provides a 32-bit mode (enabled by default) that interprets two consecutive 16-bit values as 32-bit data.
-If you are not interested in implementation details, you can skip to the client example at the end of this section.
+If you are only interested in usage, you can skip ahead to the client examples.
 
 ### Design
 #### Interpretation of Modbus Address and Quantity in 32-bit Mode
