@@ -1,8 +1,7 @@
-<img src="Komob.png" width="10%">
-<span style="font-size:200%">Komob: Lightweight Modbus Server</span>
+# <img src="Komob.png" width="10%"> Komob: Lightweight Modbus Server
 
-# Overview
-## Features
+## Overview
+### Features
 
 **Komob** is a lightweight Modbus server written in C++, designed to enable control of embedded devices via Modbus/TCP.
 It is intended for use in FPGA + Linux (SoC) environments, with minimal dependencies and an emphasis on easy integration into user code.
@@ -31,7 +30,7 @@ It is intended for use in FPGA + Linux (SoC) environments, with minimal dependen
   - Supports software virtual registers and access monitors
 
 
-## Intended Use Cases
+### Intended Use Cases
 
 - FPGA / SoC-based control devices
 - Modbus interfaces for experimental equipment and measurement instruments
@@ -39,7 +38,7 @@ It is intended for use in FPGA + Linux (SoC) environments, with minimal dependen
 - Devices for integration with PLCs and SCADA systems
 
 
-## Design Philosophy
+### Design Philosophy
 
 - Simplicity-first implementation
 - Designed for long-term continuous operation
@@ -47,8 +46,8 @@ It is intended for use in FPGA + Linux (SoC) environments, with minimal dependen
 - Extensible architecture (Chain-of-Responsibility)
 
 
-# Usage
-## User Register Table
+## Usage
+### User Register Table
 Clients read and write integer values (16-bit or 32-bit) to registers (Modbus Holding Registers) at specified addresses using the Modbus protocol.
 You define your own register table and implement register read/write operations for your device.
 The procedure is as follows:
@@ -61,7 +60,7 @@ The procedure is as follows:
   - Return `true` if the `address` is valid; otherwise, return `false`
   - On error, throw an exception (any exception will result in a SLAVE_FAILURE response to the client; logging is your responsibility)
 
-### Register Table Implementation Example
+#### Register Table Implementation Example
 Below is an example implementation of 256 memory registers that store written values.
 
 ```cpp
@@ -95,10 +94,10 @@ class MemoryRegisterTable : public komob::RegisterTable {
 
 If logging is needed, write to `std::cerr` and connect to an appropriate log collection system based on how the server is deployed (see below).
 
-## Server Part
+### Server Part
 The server listens on port 502 (or a specified port) and allows connected clients to read from and write to the user's register table via the Modbus protocol.
 
-### Standard Configuration
+#### Standard Configuration
 Create an instance of your register table and pass its `shared_ptr` to the server. This can be written in the same file as the register table.
 ```cpp
 int main(int argc, char** argv)
@@ -120,7 +119,7 @@ The server's default settings are as follows:
 When a timeout occurs, the server disconnects the client.
 To continue processing, the client must reconnect.
 
-### Using Multiple Register Tables
+#### Using Multiple Register Tables
 For details, see the Chain-of-Responsibility section.
 
 ```cpp
@@ -133,7 +132,7 @@ int main(int argc, char** argv)
 }
 ```
 
-### 16-bit Mode
+#### 16-bit Mode
 Although Modbus is a 16-bit protocol, Komob by default combines two data words for 32-bit access.
 For compatibility with PLCs and similar systems, you can optionally enable 16-bit access.
 
@@ -147,7 +146,7 @@ int main(int argc, char** argv)
 }
 ```
 
-## Compilation and Startup
+### Compilation and Startup
 Komob consists of a single header file, so there is no need to link libraries or use special build tools.
 If your file containing the register table and `main()` function is named `my-modbus-server.cpp`, copy the `komob.hpp` file to the same directory and compile as follows:
 ```
@@ -178,7 +177,7 @@ Typically, you would configure the server to start automatically at system boot.
 
 For specific methods, ask an AI like "I want to automatically run the command `/PATH/TO/CODE/my-modbus-server` at system startup using systemd" and it will teach you how.
 
-## Client Side
+### Client Side
 In 16-bit mode, common Modbus clients can be used in the standard way.
 The same applies in 32-bit mode (default) if all upper 16 bits are 0 and you are not reading/writing multiple registers in a single transaction.
 Use Holding Registers, not Input Registers or Coils.
@@ -193,12 +192,12 @@ client = ModbusTcpClient(host, port=port)
 address = 0x10
 value = 0xabcd
 
-# Writing a 16bit value to the device
+## Writing a 16bit value to the device
 reply = client.write_registers(address, [value])
 if reply is None or reply.isError():
     print("ERROR")
 
-# Reading a 16bit value from the device
+## Reading a 16bit value from the device
 reply = client.read_holding_registers(address, count=1)
 if reply is None or reply.isError():
     print("ERROR")
@@ -209,13 +208,13 @@ else:
 For using 32-bit values, see the next chapter.
 
 
-# Handling 32-bit Data
+## Handling 32-bit Data
 Modbus uses a 16-bit data width, and access to 32-bit data is not defined in the specification.
 Komob provides a 32-bit mode (enabled by default) that interprets two consecutive 16-bit values as 32-bit data.
 If you are not interested in implementation details, you can skip to the client example at the end of this section.
 
-## Design
-### Interpretation of Modbus Address and Quantity in 32-bit Mode
+### Design
+#### Interpretation of Modbus Address and Quantity in 32-bit Mode
 
 In the Modbus protocol, `quantity` represents the "number of 16-bit words (data size)" per the specification. In 32-bit mode, the `quantity` parameter indicates the size of the data block, and the data block is interpreted as an array of 32-bit values.
 Therefore, in 32-bit mode:
@@ -226,7 +225,7 @@ Therefore, in 32-bit mode:
 
 This approach means the RegisterTable does not need to handle Modbus-specific "16-bit words" or "even address constraints."
 
-#### Mapping Examples by Server Mode
+##### Mapping Examples by Server Mode
 When writing `[ 0x1111, 0x2222, 0x3333, 0x4444 ]` to Modbus address `1000`, the `quantity` (word count) parameter in the Modbus packet is `4`. When the server receives this request, `RegisterTable`'s `write(address, value)` is called as follows:
 
 | address | value, 16-bit mode | value, 32-bit mode | value, 32-bit CDAB mode |
@@ -242,7 +241,7 @@ The choice between 16-bit and 32-bit mode is expected to be fixed at system desi
 
 The same applies to reads: when issuing a read request from address `1000` with `quantity`/`count` of `4`, `read(address, &value)` is called 4 times (16-bit mode) or 2 times (32-bit mode) as shown above, and an array of length `4` is returned to the client. Therefore, in 32-bit mode, the client must reconstruct the values (see the client implementation examples below).
 
-### Protocol-Independent Register Table
+#### Protocol-Independent Register Table
 
 The RegisterTable in Komob is an abstraction representing a "logical register array" that is independent of any specific communication protocol.
 
@@ -259,7 +258,7 @@ This design allows the same RegisterTable implementation to be reused across mul
 - Other future protocols
 
 
-### Data Width is a View of the Communication Server
+#### Data Width is a View of the Communication Server
 
 The bit width exposed to external clients is determined by the Server's operation mode, not the RegisterTable.
 In Komob, you can explicitly set the Server's operation mode to 16-bit or 32-bit.
@@ -278,9 +277,9 @@ The Server performs:
 
 on values obtained from the RegisterTable. Values exceeding the specified width are truncated. This is standard behavior in FPGA / SoC environments and is not treated as an error.
 
-## Operational Assumptions
+### Operational Assumptions
 
-### SoC Environment: 32-bit Is Convenient
+#### SoC Environment: 32-bit Is Convenient
 
 For SoC / FPGA applications, 32-bit mode should be convenient for the following reasons:
 
@@ -289,7 +288,7 @@ For SoC / FPGA applications, 32-bit mode should be convenient for the following 
 - Modbus functions as a simple external interface (view)
 
 
-### Integration with Existing PLC / SCADA Systems: 16-bit Is Safe
+#### Integration with Existing PLC / SCADA Systems: 16-bit Is Safe
 
 When integrating with existing PLC, SCADA, HMI, or other systems via Modbus, 16-bit mode is the safer choice. Many PLC systems assume Modbus Holding Registers are 16-bit, with 32-bit values represented by combining 2 registers in vendor-specific ways. Using 32-bit mode can cause interoperability issues due to:
 
@@ -298,7 +297,7 @@ When integrating with existing PLC, SCADA, HMI, or other systems via Modbus, 16-
 - Type definition differences between PLC vendors
 
 
-## Client Implementation in 32-bit Mode
+### Client Implementation in 32-bit Mode
 
 On the Modbus client side, use standard libraries (e.g., pymodbus) with the following conventions:
 
@@ -307,7 +306,7 @@ On the Modbus client side, use standard libraries (e.g., pymodbus) with the foll
 - Data size is specified as the number of 16-bit words
 - Address increments by 1 for each 32-bit value (RegisterTable is a 32-bit array)
 
-### pymodbus Example
+#### pymodbus Example
 For 32-bit access, decompose values into a 16-bit array when writing, and combine every two words when reading.
 
 ```python
@@ -342,7 +341,7 @@ while True:
     time.sleep(1)
 ```
 
-### SlowPy Example
+#### SlowPy Example
 Using SlowPy, the Python library from [SlowDash](https://github.com/slowproj/slowdash), you can perform 32-bit access directly.
 
 ```python
@@ -365,8 +364,8 @@ while True:
 ```
 
 
-# Using Multiple Register Tables with Chain-of-Responsibility
-## Structure
+## Using Multiple Register Tables with Chain-of-Responsibility
+### Structure
 
 In Komob, multiple `RegisterTable` instances can be registered in a chain.
 
@@ -388,7 +387,7 @@ Requests (read/write) are passed through the tables in order, and processing sto
 This mechanism enables not only functionally separated register tables, but also "software registers" that add functionality, or cross-cutting concerns such as access monitoring.
 
 
-## Examples of What You Can Do
+### Examples of What You Can Do
 
 - **Functional separation**: Separate tables by address range or purpose for better organization
 - **Software registers**: Provide read count, last access time, error counter, etc. as "virtual registers"
@@ -397,7 +396,7 @@ This mechanism enables not only functionally separated register tables, but also
 
 This pattern allows you to start with a minimal implementation and gradually add features as needed.
 
-### 1. Functionally Separated Register Tables
+#### 1. Functionally Separated Register Tables
 
 A typical use case is to divide register tables by functional unit:
 
@@ -408,7 +407,7 @@ A typical use case is to divide register tables by functional unit:
 
 Implementing each as an independent `RegisterTable` and registering them with the server improves readability and maintainability.
 
-### 2. Software-Only Registers
+#### 2. Software-Only Registers
 
 The Chain-of-Responsibility pattern allows you to naturally add "software registers without physical backing."
 
@@ -420,7 +419,7 @@ For example:
 
 These can be added without modifying existing register maps.
 
-### 3. Access Monitor Example
+#### 3. Access Monitor Example
 
 Below is an example of a monitor-only RegisterTable for logging Modbus read/write access.
 
@@ -447,7 +446,7 @@ By placing this `RegisterTable` at the head of the chain, you can:
 
 The key point is that this monitor does not affect actual register processing.
 
-### 4. RegisterTable as a Layered Architecture
+#### 4. RegisterTable as a Layered Architecture
 
 Using Chain-of-Responsibility, RegisterTables can be organized into layers:
 
