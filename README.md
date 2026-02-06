@@ -81,7 +81,7 @@ class MemoryRegisterTable : public komob::RegisterTable {
         value = registers[address];
         return true;
     }
-<
+
     bool write(unsigned address, unsigned value) override {
         if (address >= registers.size()) {
             return false;
@@ -264,7 +264,7 @@ Komob における RegisterTable は，特定の通信プロトコルに依存�
 
 #### データ幅は通信サーバーのビュー
 
-実際に値を 何ビットとして外部に公開するかは，RegisterTable ではなくServer の動作モードによって決定されます．
+実際に値を何ビットとして外部に公開するかは，RegisterTable ではなく Server の動作モードによって決定されます．
 Komob では，Server の動作モードとして 16bit / 32bit を明示的に切り替えられます．
 
 - **16bit モード**
