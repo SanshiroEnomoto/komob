@@ -1,6 +1,5 @@
----
-title: "Komob (小モブ): Small Modbus Server"
----
+<img src="Komob.png" width="10%">
+<span style="font-size:200%">Komob: Lightweight Modbus Server</span>
 
 # Overview
 ## Features

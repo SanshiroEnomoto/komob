@@ -1,8 +1,6 @@
----
-title: "Komob (小モブ): 小型 Modbus サーバー"
----
-
 <img src="Komob.png" width="10%">
+<span style="font-size:200%">Komob (小モブ): 小型 Modbus サーバー</span>
+
 
 Komob is a small and lightweight Modbus/TCP server library written in C++.<br>
 (For English documentation, see [README_EN.md](README_EN.md))
