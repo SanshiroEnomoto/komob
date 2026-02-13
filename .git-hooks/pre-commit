@@ -1,0 +1,15 @@
+#!/bin/bash
+
+DATE=$(date +"%Y-%m-%d")
+
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp|h|c)$')
+
+for file in $FILES; do
+    if ! grep -q "Last Commit Date:" "$file"; then
+        echo "// Last Commit Date: $DATE" | cat - "$file" > temp && mv temp "$file"
+        git add "$file"
+    else
+        sed -i "s|// Last Commit Date:.*|// Last Commit Date: $DATE|" "$file"
+        git add "$file"
+    fi
+done

@@ -1,6 +1,7 @@
 // komob.hpp
 // Minimal Modbus Server
 // Created by Sanshiro Enomoto on 31 January 2026.
+// Last Commit Date: 2502130
 
 #pragma once
 
@@ -19,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cerrno>
 
 
 #if 0
@@ -44,14 +46,19 @@ enum class DataWidth { W16, W32 };
     
 class Server {
   public:
-    Server(std::shared_ptr<RegisterTable> register_table=nullptr, DataWidth width=DataWidth::W32);
+    Server(
+        std::shared_ptr<RegisterTable> register_table=nullptr,
+        DataWidth width=DataWidth::W32,
+        int keepalive_idle_sec=3600,
+        int packet_timeout_msec = 1000
+    );
     inline Server& add(std::shared_ptr<RegisterTable> register_table);
     inline int run(int argc, char** argv);
     inline void serve(unsigned port=502);
   private:
     inline void set_nonblocking(int fd);
     inline void set_sock_timeouts_ms(int fd, int rcv_ms, int snd_ms);
-    inline void set_keepalive(int fd, int idle=3600, int interval=30, int count=3);
+    inline void set_keepalive(int fd, int idle, int interval, int count);
     inline bool handle_single_request(int fd);
     inline std::vector<uint8_t> dispatch_pdu(const std::vector<uint8_t>& request);
     inline std::vector<uint8_t> exception_pdu(uint8_t function_code, uint8_t exception_code);
@@ -60,6 +67,8 @@ class Server {
     inline std::vector<uint8_t> write_multiple_registers(const std::vector<uint8_t>& request);
   private:
     DataWidth data_width;
+    int keepalive_idle, keepalive_interval, keepalive_count;
+    int timeout_ms;
     std::vector<std::shared_ptr<RegisterTable>> register_tables;
 
   private:
@@ -128,13 +137,19 @@ class Server {
 
 
 
-inline Server::Server(std::shared_ptr<RegisterTable> register_table, DataWidth width)
+inline Server::Server(std::shared_ptr<RegisterTable> register_table, DataWidth width, int keepalive_idle_sec, int packet_timeout_ms)
 {
     if (register_table) {
         register_tables.push_back(register_table);
     }
 
     data_width = width;
+    
+    keepalive_idle = keepalive_idle_sec;
+    keepalive_interval = 30;
+    keepalive_count = 3;
+    
+    timeout_ms = packet_timeout_ms;
 }
     
     
@@ -181,7 +196,7 @@ inline void Server::serve(unsigned port)
 
     if (::bind(listen_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
         ::close(listen_fd);
-        throw std::runtime_error("bind() failed (port 502 needs root)");
+        throw std::runtime_error("bind() failed (note that port 502 needs root)");
     }
     if (::listen(listen_fd, 16) < 0) {
         ::close(listen_fd);
@@ -222,7 +237,8 @@ inline void Server::serve(unsigned port)
                     break;
                 }
 
-                set_sock_timeouts_ms(fd, /*rcv_ms=*/1000, /*snd_ms=*/1000);
+                set_keepalive(fd, keepalive_idle, keepalive_interval, keepalive_count);
+                set_sock_timeouts_ms(fd, /*rcv*/timeout_ms, /*snd*/timeout_ms);
 
                 char ipbuf[64];
                 ::inet_ntop(AF_INET, &client.sin_addr, ipbuf, sizeof(ipbuf));
@@ -296,7 +312,7 @@ inline void Server::set_keepalive(int fd, int idle, int interval, int count)
 }
 
 
-bool Server::handle_single_request(int fd)
+inline bool Server::handle_single_request(int fd)
 {
     uint8_t header[7]; // MBAP: Modus Application Protocol
     if (! read_exact(fd, header, sizeof(header))) {
@@ -316,7 +332,7 @@ bool Server::handle_single_request(int fd)
     KOMOB_DEBUG(std::cerr << "unitid=" << unit_id << ")" << std::endl);
     
     if (protocol_id != 0) {
-        return true;   // not Modbus protocol: ignored
+        return false;   // not Modbus protocol: -> close
     }
     else if (length < 2) {            
         return false;   // bad Modbus packet: too short -> unrecoverable error -> close
@@ -326,6 +342,10 @@ bool Server::handle_single_request(int fd)
     // UnitID(1) + PDU(...)
     // After reading header, we still need to read PDU length=length-1 (since UnitID is already in header)
     size_t pdu_length = length > 1 ? static_cast<size_t>(length-1) : 0;
+    if (pdu_length > 256) {            
+        return false;   // too large request (to prevent memory full) -> error -> close
+    }
+    
     std::vector<uint8_t> pdu(pdu_length);
     if (! read_exact(fd, pdu.data(), pdu.size())) {
         KOMOB_DEBUG(std::cerr << "ERROR: Connection closed during a request");
@@ -363,7 +383,7 @@ bool Server::handle_single_request(int fd)
 }
 
 
-std::vector<uint8_t> Server::dispatch_pdu(const std::vector<uint8_t>& request)
+inline std::vector<uint8_t> Server::dispatch_pdu(const std::vector<uint8_t>& request)
 {
     if (request.size() < 1) {
         return exception_pdu(0, EX_ILLEGAL_FUNCTION);
@@ -387,7 +407,7 @@ std::vector<uint8_t> Server::dispatch_pdu(const std::vector<uint8_t>& request)
 }
 
 
-std::vector<uint8_t> Server::exception_pdu(uint8_t function_code, uint8_t exception_code)
+inline std::vector<uint8_t> Server::exception_pdu(uint8_t function_code, uint8_t exception_code)
 {
     std::vector<uint8_t> out;
     out.push_back(static_cast<uint8_t>(function_code | 0x80));
@@ -397,7 +417,7 @@ std::vector<uint8_t> Server::exception_pdu(uint8_t function_code, uint8_t except
 }
 
 
-std::vector<uint8_t> Server::read_holding_registers(const std::vector<uint8_t>& request)
+inline std::vector<uint8_t> Server::read_holding_registers(const std::vector<uint8_t>& request)
 {
     // Request: [FC(0x03)][Start Hi][Start Lo][Qty Hi][Qty Lo]
     uint8_t function_code = request[0];  // size has been tested to be greater than 1
@@ -408,6 +428,13 @@ std::vector<uint8_t> Server::read_holding_registers(const std::vector<uint8_t>& 
     unsigned quantity = static_cast<unsigned>(get_u16(&request[3]));
     unsigned width = (data_width == DataWidth::W32) ? 2 : 1;
     KOMOB_DEBUG(std::cerr << "ReadHoldingRegister(start=" << start << ",quantity=" << quantity << ")" << std::endl);
+    
+    if (quantity % width != 0) {
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);
+    }
+    if (quantity > 128) {
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);  // return byte-count is 8-bit
+    }
     
     try {
         std::vector<uint8_t> out;
@@ -434,19 +461,19 @@ std::vector<uint8_t> Server::read_holding_registers(const std::vector<uint8_t>& 
                 KOMOB_DEBUG(std::cerr << std::hex << "[0x" << address << "]=>0x" << value << " ");
             }
             else {
-                throw std::runtime_error("bad address");
+                return exception_pdu(function_code, EX_ILLEGAL_ADDRESS);
             }
         }
         KOMOB_DEBUG(std::cerr << std::endl);
         return out;
     }
     catch (...) {
-        return exception_pdu(function_code, EX_ILLEGAL_ADDRESS);
+        return exception_pdu(function_code, EX_SLAVE_FAILURE);
     }
 }
 
     
-std::vector<uint8_t> Server::write_single_register(const std::vector<uint8_t>& request)
+inline std::vector<uint8_t> Server::write_single_register(const std::vector<uint8_t>& request)
 {
     // Request: [FC(0x06))[Addr Hi][Addr Lo][Val Hi][Val Lo]
     uint8_t function_code = request[0];  // size has been tested to be greater than 1
@@ -456,6 +483,10 @@ std::vector<uint8_t> Server::write_single_register(const std::vector<uint8_t>& r
     unsigned address = static_cast<unsigned>(get_u16(&request[1]));
     unsigned value = static_cast<unsigned>(get_u16(&request[3]));
     KOMOB_DEBUG(std::cerr << "WriteHoldingRegister(address=0x" << std::hex << address << ",value=0x" << value << ")" << std::endl);
+    
+    if (data_width != DataWidth::W16) {
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);
+    }
 
     try {
         bool handled = false;
@@ -466,17 +497,17 @@ std::vector<uint8_t> Server::write_single_register(const std::vector<uint8_t>& r
             }
         }
         if (! handled) {
-            throw std::runtime_error("bad address");
+            return exception_pdu(function_code, EX_ILLEGAL_ADDRESS);
         }
         return request;  // Response echoes the request PDU per spec
     }
     catch (...) {
-        return exception_pdu(function_code, EX_ILLEGAL_ADDRESS);
+        return exception_pdu(function_code, EX_SLAVE_FAILURE);
     }
 }
 
 
-std::vector<uint8_t> Server::write_multiple_registers(const std::vector<uint8_t>& request) {
+inline std::vector<uint8_t> Server::write_multiple_registers(const std::vector<uint8_t>& request) {
     // Request:
     // [FC(0x10)][Addr Hi][Addr Lo][Qty Hi][Qty Lo][ByteCount][Values...]
     uint8_t function_code = request[0];  // size has been tested to be greater than 1
@@ -490,10 +521,13 @@ std::vector<uint8_t> Server::write_multiple_registers(const std::vector<uint8_t>
     KOMOB_DEBUG(std::cerr << "WriteMultipleRegisters(start=" << start << ",quantity=" << quantity << ")" << std::endl);
     
     if (byte_count != quantity * 2) {
-        return exception_pdu(0x10, EX_ILLEGAL_VALUE);
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);
+    }
+    if (quantity % width != 0) {
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);
     }
     if (request.size() != static_cast<size_t>(6 + byte_count)) {
-        return exception_pdu(0x10, EX_ILLEGAL_VALUE);
+        return exception_pdu(function_code, EX_ILLEGAL_VALUE);
     }
     
     try {
@@ -518,7 +552,7 @@ std::vector<uint8_t> Server::write_multiple_registers(const std::vector<uint8_t>
                 KOMOB_DEBUG(std::cerr << std::hex << "[0x" << address << "]<=0x" << value << " ");
             }
             else {
-                throw std::runtime_error("bad address");
+                return exception_pdu(function_code, EX_ILLEGAL_ADDRESS);
             }
         }
         KOMOB_DEBUG(std::cerr << std::endl);
@@ -531,7 +565,7 @@ std::vector<uint8_t> Server::write_multiple_registers(const std::vector<uint8_t>
         return out;
     }
     catch (...) {
-        return exception_pdu(0x10, EX_ILLEGAL_ADDRESS);
+        return exception_pdu(function_code, EX_SLAVE_FAILURE);
     }
 }
 
