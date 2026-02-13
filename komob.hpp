@@ -1,7 +1,8 @@
 // komob.hpp
 // Minimal Modbus Server
 // Created by Sanshiro Enomoto on 31 January 2026.
-// Last Commit Date: 2502130
+// Last Commit Date: 2026-02-13
+
 
 #pragma once
 
