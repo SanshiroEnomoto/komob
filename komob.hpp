@@ -1,7 +1,6 @@
-// komob.hpp
-// Minimal Modbus Server
+// komob.hpp: Minimal Modbus Server
 // Created by Sanshiro Enomoto on 31 January 2026.
-// Last Commit Date: 2026-02-13
+// Version: 260213 (commit 8a03ec7)
 
 
 #pragma once
