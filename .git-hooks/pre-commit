@@ -3,7 +3,7 @@ set -eu
 
 DATE=$(date +"%y%m%d")
 SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "UNKNOWN")
-FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp|h|c)$')
+FILES="komob.hpp README.md"
 
 for FILE in $FILES; do
   awk -v d="$DATE" -v sha="$SHA" '

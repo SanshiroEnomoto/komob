@@ -1,5 +1,7 @@
 # <img src="Komob.png" width="10%"> Komob (小モブ): 小型 Modbus サーバー
 
+// Version: 260213 (commit de8b186)
+
 Komob is a small and lightweight Modbus/TCP server library written in C++.<br>
 (For English documentation, see [README_EN.md](README_EN.md))
 
@@ -461,3 +463,11 @@ Chain-of-Responsibility を用いることで，RegisterTable は以下のよう
 - 実レジスタ層（SoC / FPGA 直結）
 
 それぞれが独立しており，必要に応じて追加・削除・並び替えが可能です．
+
+
+## 既知の問題
+- Komob は Holding Register の読み書きのみ実装しています．Input Register や Coil などは使用できません．
+- Komob は構内ネットワークでの使用を想定し，セキュリティ関連の機能は実装していません．
+- 途中で切れた Modbus パケットを受け取った場合，Komob はタイムアウト時間（デフォルト１秒，変更可）まで続きを待ち，この間は他のリクエストが処理されません．タイムアウト後にその接続が切断されますが，連続で再接続し中断パケットを送り続けた場合，システム全体を麻痺させることができます(DoS 攻撃)．そういうことをしないでください．
+- Komob は，同時接続数に制限を設けていません．複数のホストから大量の接続要求を送ると，システムリソースを使い果たすようにすることができます（DDoS 攻撃）．そういうことをしないでください．
+
