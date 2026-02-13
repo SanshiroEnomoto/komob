@@ -2,14 +2,13 @@
 set -eu
 
 DATE=$(date +"%y%m%d")
-SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "UNKNOWN")
 FILES="komob.hpp README.md"
 
 for FILE in $FILES; do
-  awk -v d="$DATE" -v sha="$SHA" '
+  awk -v d="$DATE" '
     {
       if ($0 ~ /^\/\/[[:space:]]*Version:/) {
-        print "// Version: " d " (commit " sha ")"
+        print "// Version: " d " //"
       } else {
         print
       }
