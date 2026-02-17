@@ -195,8 +195,24 @@ inline void Server::serve(unsigned port)
     addr.sin_port = htons(static_cast<uint16_t>(port));
 
     if (::bind(listen_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        int err = errno;
         ::close(listen_fd);
-        throw std::runtime_error("bind() failed (note that port 502 needs root)");
+        if (err == EACCES) {
+            throw std::runtime_error(
+                    "bind() failed: permission denied."
+                    "privileged port <1024 requires root."
+            );
+        }
+        else if (err == EADDRINUSE) {
+            throw std::runtime_error(
+                    "bind() failed: port already in use."
+            );
+        }
+        else {
+            throw std::runtime_error(
+                    std::string("bind() failed: ") + std::strerror(err)
+            );
+        }
     }
     if (::listen(listen_fd, 16) < 0) {
         ::close(listen_fd);
